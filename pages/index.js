@@ -1,8 +1,116 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import Head from 'next/head';
+import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import styles from '../styles/Home.module.css';
+// import WalletConnectProvider from '@walletconnect/web3-provider';
+import WalletConnectProvider from '@walletconnect/ethereum-provider';
+
+import { providers } from 'ethers';
+import WalletConnect from '@walletconnect/client';
+import QRCodeModal from '@walletconnect/qrcode-modal';
+import { Transaction, FeeMarketEIP1559Transaction } from '@ethereumjs/tx';
+import Common, { CustomChain, Chain } from '@ethereumjs/common';
+import { ethers } from 'ethers';
+
+const provider = new WalletConnectProvider({
+  infuraId: process.env.NEXT_PUBLIC_infuraId,
+  chainId: 80001,
+});
+let web3Provider = new ethers.providers.InfuraProvider(
+  'maticmum',
+  process.env.NEXT_PUBLIC_infuraId
+);
+let infuraProvider;
 
 export default function Home() {
+  const [account, setAccount] = useState(null);
+
+  useEffect(() => {
+    // if (!connector.) return;
+    infuraProvider = new ethers.providers.InfuraProvider(
+      'maticmum',
+      // 'matic',
+      // 'ropsten',
+      process.env.NEXT_PUBLIC_infuraId
+    );
+    // infuraProvider = new ethers.providers.JsonRpcProvider(
+    //   // 'https://rpc-mumbai.matic.today/'
+    //   // process.env.NEXT_PUBLIC_quicknode
+    //   // process.env.NEXT_PUBLIC_alchemy
+    //   'https://polygon-rpc.com'
+    // );
+    provider.on('accountsChanged', (accounts) => {
+      console.log(accounts);
+      setAccount(accounts[0]);
+    });
+    provider.on('connect', async (error, payload) => {
+      console.log(error, payload);
+    });
+  }, []);
+
+  const connect = async () => {
+    const accounts = await provider.enable();
+    setAccount(accounts[0]);
+  };
+
+  const signTx = async () => {
+    try {
+      const from = account;
+      // const from = '0xB9a9F5888F418cd02959491D51D6e0851Dcb68C3';
+      // const to = '0x98941094d282ddA631031283EA70ec9e81246638';
+      const to = '0xA02CDdFa44B8C01b4257F54ac1c43F75801E8175';
+
+      // Mainnet = 1,
+      // Ropsten = 3,
+      // Rinkeby = 4,
+      // Kovan = 42,
+      // Goerli = 5,
+      // Sepolia = 11155111
+      let txData = {
+        data: '0x13881', // common.chainIdBN(),
+        from,
+        // nonce: 0,
+        gasPrice: 100000000000,
+        gasLimit: 21000,
+        to,
+        value: 0,
+      };
+      let nonce = await web3Provider.getTransactionCount(from);
+      console.log('nonce', nonce);
+      let customRequest = {
+        id: 1337,
+        jsonrpc: '2.0',
+        method: 'eth_signTransaction',
+        params: [
+          {
+            // data: '0x13881', // common.chainIdBN(),
+            chainId: 80001,
+            from,
+            to,
+            gasPrice: 10000000000,
+            gasLimit: 21000000,
+            value: 0,
+            nonce,
+            // nonce: '0x0114',
+          },
+        ],
+      };
+      const estimate = await web3Provider.estimateGas(customRequest.params[0]);
+      console.log('estimate', estimate.toString());
+      customRequest.params[0].gasLimit = parseInt(estimate.toString());
+      const result = await provider.request(customRequest);
+      console.log('result', result, typeof result);
+      const parsedTx = ethers.utils.parseTransaction(result);
+      console.log('parsedTx', parsedTx);
+      const res = await web3Provider.sendTransaction(result);
+      console.log('res', res);
+      const txRcpt = await res.wait();
+      console.log('txRcpt', txRcpt);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <Head>
@@ -12,58 +120,10 @@ export default function Home() {
       </Head>
 
       <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
-
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
-        </p>
-
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/canary/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
+        <button onClick={connect}>Connect to wallet</button>
+        <button onClick={() => provider.disconnect()}>Disconnect</button>
+        <button onClick={signTx}>sign and send Transaction</button>
       </main>
-
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
-      </footer>
     </div>
-  )
+  );
 }
